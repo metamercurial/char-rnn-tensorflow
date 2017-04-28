@@ -41,8 +41,12 @@ class TextLoader():
     def load_preprocessed(self, vocab_file, tensor_file):
         with open(vocab_file, 'rb') as f:
             self.chars = cPickle.load(f)
+
+        # 65 characters, 52 alphabets (caps, small) + misc characters incl. whitespace
         self.vocab_size = len(self.chars)
+        # dictionary char->index
         self.vocab = dict(zip(self.chars, range(len(self.chars))))
+        # likely text written in index (of vocabulary matrix)
         self.tensor = np.load(tensor_file)
         self.num_batches = int(self.tensor.size / (self.batch_size *
                                                    self.seq_length))
@@ -59,6 +63,7 @@ class TextLoader():
         self.tensor = self.tensor[:self.num_batches * self.batch_size * self.seq_length]
         xdata = self.tensor
         ydata = np.copy(self.tensor)
+        # ydata is simply the text sequence shifted one word down for every word
         ydata[:-1] = xdata[1:]
         ydata[-1] = xdata[0]
         self.x_batches = np.split(xdata.reshape(self.batch_size, -1),
