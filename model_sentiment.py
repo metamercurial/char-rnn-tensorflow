@@ -1,16 +1,25 @@
+'''
+A Recurrent Neural Network (LSTM) implementation example using TensorFlow library for sentiment analysis.
+Forked from https://github.com/sherjilozair/char-rnn-tensorflow
+
+Author: Jonathan Gan
+'''
+
+
 import tensorflow as tf
 from tensorflow.contrib import rnn
 from tensorflow.contrib import legacy_seq2seq
 
 import numpy as np
 
-
-class Model():
+class ModelSentiment():
     def __init__(self, args, training=True):
         self.args = args
         if not training:
             args.batch_size = 1
             args.seq_length = 1
+
+        output_dim = 2
 
         if args.model == 'rnn':
             cell_fn = rnn.BasicRNNCell
@@ -39,13 +48,13 @@ class Model():
         self.input_data = tf.placeholder(
             tf.int32, [args.batch_size, args.seq_length])
         self.targets = tf.placeholder(
-            tf.int32, [args.batch_size, args.seq_length])
+            tf.int32, [args.batch_size, output_dim])
         self.initial_state = cell.zero_state(args.batch_size, tf.float32)
 
         with tf.variable_scope('rnnlm'):
             softmax_w = tf.get_variable("softmax_w",
-                                        [args.rnn_size, args.vocab_size])
-            softmax_b = tf.get_variable("softmax_b", [args.vocab_size])
+                                        [args.rnn_size, output_dim])
+            softmax_b = tf.get_variable("softmax_b", [output_dim])
 
         # embedding matrix of vocab x hidden units
         # represents embedding layer
@@ -59,31 +68,18 @@ class Model():
         inputs = tf.split(inputs, args.seq_length, 1)
         inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
 
-        def loop(prev, _):
-            prev = tf.matmul(prev, softmax_w) + softmax_b
-            prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
-            return tf.nn.embedding_lookup(embedding, prev_symbol)
-
-
-        # could possibly swap this out for static_rnn
-        # outputs, last_state = legacy_seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=loop if not training else None, scope='rnnlm')
-        # output = tf.reshape(tf.concat(outputs, 1), [-1, args.rnn_size])
-
         # static_rnn implementation
         outputs, last_state = rnn.static_rnn(cell,inputs,initial_state=self.initial_state)
-        output = tf.reshape(tf.concat(outputs, 1), [-1, args.rnn_size])
+        # output = tf.reshape(tf.concat(outputs, 1), [-1, args.rnn_size])
 
-        self.logits = tf.matmul(output, softmax_w) + softmax_b
+        self.logits = tf.matmul(outputs[-1], softmax_w) + softmax_b
         self.probs = tf.nn.softmax(self.logits)
-        # loss = legacy_seq2seq.sequence_loss_by_example(
-        #         [self.logits],
-        #         [tf.reshape(self.targets, [-1])],
-        #         [tf.ones([args.batch_size * args.seq_length])])
-        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits,
-                                                              labels=tf.reshape(self.targets, [-1]))
-        self.cost = tf.reduce_sum(loss) / args.batch_size / args.seq_length
+
+        loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits,
+                                                        labels=self.targets)
+        self.cost = tf.reduce_mean(loss)
         with tf.name_scope('cost'):
-            self.cost = tf.reduce_sum(loss) / args.batch_size / args.seq_length
+            self.cost = tf.reduce_mean(loss)
         self.final_state = last_state
         self.lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()

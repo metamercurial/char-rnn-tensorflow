@@ -94,5 +94,5 @@ ENV/
 data.npy
 vocab.pkl
 
-# pycharm idea files
+# pycharm idea files 
 .idea/

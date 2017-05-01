@@ -3,6 +3,40 @@ import os
 import collections
 from six.moves import cPickle
 import numpy as np
+from tflearn.data_utils import to_categorical, pad_sequences
+
+
+class IMDBDatasetManager():
+    def __init__(self, training_data, test_data, batch_size, seq_length, vocab_size):
+        # training data
+        self.train_x, self.train_y = training_data
+        self.train_x = pad_sequences(self.train_x, maxlen=seq_length, value=0.)
+        self.train_y = to_categorical(self.train_y, nb_classes=2)
+        self.train_x = np.array(self.train_x)
+        self.train_y = np.array(self.train_y)
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.num_batches = int(len(self.train_x) / batch_size) # len(train_y) should be equals len(train_x) too
+        self._preprocess()
+        self.batch_pointer = 0
+
+        # test data
+        self.test_x, self.test_y = test_data
+        self.test_x = pad_sequences(self.test_x, maxlen=seq_length, value=0.)
+        self.test_y = to_categorical(self.test_y, nb_classes=2)
+
+    def _preprocess(self):
+        # divide into batches
+        self.x_batches = np.split(self.train_x.reshape(self.batch_size, -1),
+                                  self.num_batches, 1)
+        self.y_batches = np.split(self.train_y.reshape(self.batch_size, -1),
+                                  self.num_batches, 1)
+
+    def get_next_batch(self):
+        x, y = self.x_batches[self.batch_pointer], self.y_batches[self.batch_pointer]
+        self.batch_pointer += 1
+        return x, y
+
 
 
 class TextLoader():
@@ -41,8 +75,12 @@ class TextLoader():
     def load_preprocessed(self, vocab_file, tensor_file):
         with open(vocab_file, 'rb') as f:
             self.chars = cPickle.load(f)
+
+        # 65 characters, 52 alphabets (caps, small) + misc characters incl. whitespace
         self.vocab_size = len(self.chars)
+        # dictionary char->index
         self.vocab = dict(zip(self.chars, range(len(self.chars))))
+        # likely text written in index (of vocabulary matrix)
         self.tensor = np.load(tensor_file)
         self.num_batches = int(self.tensor.size / (self.batch_size *
                                                    self.seq_length))
@@ -59,6 +97,7 @@ class TextLoader():
         self.tensor = self.tensor[:self.num_batches * self.batch_size * self.seq_length]
         xdata = self.tensor
         ydata = np.copy(self.tensor)
+        # ydata is simply the text sequence shifted one word down for every word
         ydata[:-1] = xdata[1:]
         ydata[-1] = xdata[0]
         self.x_batches = np.split(xdata.reshape(self.batch_size, -1),
